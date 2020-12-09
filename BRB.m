@@ -84,7 +84,7 @@ calculated_output = zeros(M,1);
 differences = zeros(M,1);
 
 for i = 1:M
-    weights = get_rule_weights(train_input,i,T,N,ref_val); % Belief Degrees
+    weights = get_rule_weights(train_input,i,T,N,ref_val); % Rule Weights
 
     % Calculate Aggregated Belief Degree and Compute Y
     aggregated_belief_degree = calc_aggregated_belief_degree(weights, belief_degrees, N, L);
