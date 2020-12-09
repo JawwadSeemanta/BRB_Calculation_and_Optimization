@@ -3,12 +3,35 @@
 % Clear Workspace
 clear;
 
-% Training Input
-% No of Inputs-Output Pair, M = 12
-% No of Attributes, T = 4
+% Initial Belief Degrees
+x0 = generate_belief_degree(3,3);  % N = 3, L = 3 (Disjunctive BRB. So, L = N)
+disp("Initial Belief Degrees = ")
+disp(x0)
 
-M = 12;
-T = 4;
+
+% Set nondefault solver options
+options = optimoptions('fmincon','PlotFcn','optimplotfvalconstr');
+
+% Solve
+[solution,objectiveValue] = fmincon(@objectiveFcn,x0,[],[],[],[],...
+    zeros(size(x0)),ones(size(x0)),[],options);
+
+% Clear variables
+clearvars options
+
+% Display Optimized Values
+disp("Least Mean Square Error = ") 
+disp(objectiveValue)
+disp("Optimized Belief Degrees = ") 
+disp(solution)
+
+function f = objectiveFcn(optimInput)
+% Training Dataset
+
+M = 12; % No of Inputs-Output Pair
+T = 4; % No of Attributes
+N = 3; % No of referencial values
+L = N; % Number of rules
 train_input = [0.98 1.0 1.0 1.0;
     0.98 0.8 0.8 0.8;
     0.98 0.8 0.2 0.8;
@@ -35,56 +58,31 @@ train_output = [1.0;
     0.2;
     0.4];
 
-% Variable For Calculated Data
-calculated_output = zeros(M,1);
-difference = zeros(M,1);
-total_squared_difference = 0;
 
-% No of referencial values, N = 3
-N = 3;
-ref_values = [1.0 0.5 0.0]; % Utility Scores of H = 1.0, M = 0.5, L = 0.0
+% Define the variables
+belief_degrees = optimInput;
 
-% Initial Belief Degrees
-% Following Disjunctive BRB Approach, 
-% In Disjunctive BRB, number of rules, L = Number of referencial values, N
-L = N;
-initial_belief_degrees = generate_belief_degree(N,L);
+ref_val = [1.0 0.5 0.0]; % Utility Scores of H = 1.0, M = 0.5, L = 0.0
 
-% Run the Disjunctive BRB Process
-for prob_no = 1:M
-    % Input to Process
-    input_number = prob_no; % This value determines the number of input_output pair we are considering
-    
-    % Step 01: Input Transformation
-    transformed_input = transform_input(train_input(input_number,:),T, N, ref_values);
-    
-    % Step 02: Rule Activation Weight Calculation    
-    matching_degrees = calc_matching_degrees(transformed_input, T, N); % Calculate Matching Degree    
-    combined_matching_degree = calc_combined_matching_degrees(matching_degrees,L); % Calculate Combined Matching Degree    
-    activation_weight = (matching_degrees) ./ (combined_matching_degree); % Calculate Activation Weight
-    
-    % Step 03: Belief Degree Update
-    belief_update_factor = 1; % Use this value to update the belief degrees
-    final_belief_degree = (initial_belief_degrees) .* (belief_update_factor);
-    
-    % Step 04: Rule Aggregation
-    % Using "Analytical Method" of ER on Disjunctive BRB
-    aggregated_belief_degree = calc_aggregated_belief_degree(activation_weight, final_belief_degree, N, L);
-    
-    % Step 05: Calculate Y and Compare with training value
-    calculated_output(input_number,1) = calculateY(aggregated_belief_degree,ref_values,N);
-    difference(input_number,1) = calculated_output(input_number,1) - train_output(input_number,1);
-    total_squared_difference = total_squared_difference + (difference(input_number,1) * difference(input_number,1));
+% Initialize calculation storing variables
+calculated_output = zeros(M,1); 
+differences = zeros(M,1);
+
+for i = 1:M
+    weights = get_rule_weights(train_input,i,T,N,ref_val); % Rule Weights
+
+    % Calculate Aggregated Belief Degree and Compute Y
+    aggregated_belief_degree = calc_aggregated_belief_degree(weights, belief_degrees, N, L);
+
+    calculated_output(i,1) = calculateY(aggregated_belief_degree,ref_val,N);
+    differences(i,1) = calculated_output(i,1) - train_output(i,1);
 end
 
-% Finally, Calculate Total Mean Squared Error
-total_mean_squared_error = (total_squared_difference / M)
-
-% Clear Workspace or Next Run will freeze MATLAB
-clear;
+% Define Objective Function
+f = sum((differences).^2) / M;
+end
 
 function arr = generate_belief_degree(N, L)
-% Function to generate belief degree
     belief_generator = rand(N,L);
     temp_gen_col_total = zeros(L,1);
     arr = zeros(N,L);
@@ -101,13 +99,19 @@ function arr = generate_belief_degree(N, L)
     end
 end
 
-
-
+function arr = get_rule_weights(train_input,input_no,no_of_attributes,no_of_ref_val, ref_vals)
+    % Input Transformation
+    transformed_input = transform_input(train_input(input_no,:),no_of_attributes, no_of_ref_val, ref_vals);
+    
+    % Rule Activation Weight Calculation    
+    matching_degrees = calc_matching_degrees(transformed_input, no_of_attributes, no_of_ref_val); % Calculate Matching Degree    
+    combined_matching_degree = calc_combined_matching_degrees(matching_degrees,no_of_ref_val); % Calculate Combined Matching Degree    
+    arr = (matching_degrees) ./ (combined_matching_degree); % Calculate Activation Weight
+end
 
 function arr = transform_input (input,no_of_attr,no_of_ref_val,ref_vals)
-% Input Transformation Function
-    
     arr = zeros(no_of_attr,no_of_ref_val); % Initialize with row_number x column_number dummy values
+    
     % Calculate and Populate with original values
     for i = 1:no_of_attr
         if (input(1,i)>= ref_vals(1,2) && input(1,i) <= ref_vals(1,1))
@@ -118,17 +122,11 @@ function arr = transform_input (input,no_of_attr,no_of_ref_val,ref_vals)
             arr(i,3) = (ref_vals(1,2) - input(1,i))/(ref_vals(1,2) - ref_vals(1,3));
             arr(i,2) = 1 - arr(i,3);
             arr(i,1) = 1 - (arr(i,2) + arr(i,3));
-            
         end
     end
-    
 end
 
-
-
-
 function arr = calc_matching_degrees(individual_matching_degree, no_of_attributes, no_of_ref_val)
-% Function for Calculating Matching Degrees
     arr = zeros(no_of_ref_val,1);
     for i = 1:no_of_ref_val
         for j = 1:no_of_attributes
@@ -138,23 +136,14 @@ function arr = calc_matching_degrees(individual_matching_degree, no_of_attribute
     end
 end
 
-
-
-
 function val = calc_combined_matching_degrees(matching_degrees, no_of_rules)
-% Function for Calculating Combined Matching Degree
     val = 0;
     for i = 1:no_of_rules
        val = val + matching_degrees(i,1);        
     end
 end
 
-
-
-
 function arr = calc_aggregated_belief_degree(activation_weight, belief_degree, no_of_ref_val, no_of_rules)
-% Function for Aggregated Belief Degree Calculation Using Analytical Method
-    
     arr = zeros(no_of_ref_val,1);
 
     partA = calc_Part_A(activation_weight, belief_degree, no_of_ref_val, no_of_rules);
@@ -170,8 +159,6 @@ function arr = calc_aggregated_belief_degree(activation_weight, belief_degree, n
         arr(j,1) = (partA(j,1) - partB)/((combined_partA - ((no_of_ref_val - 1) * partB)) - partC);
     end    
 end
-
-
 
 function arr = calc_Part_A(activation_weight, belief_degree, no_of_ref_val, no_of_rules)
     arr = zeros(3,1);
@@ -190,8 +177,6 @@ function arr = calc_Part_A(activation_weight, belief_degree, no_of_ref_val, no_o
     end
 end
 
-
-
 function val = calc_Part_B(activation_weight, belief_degree, no_of_ref_val, no_of_rules)
     val = 1;
     for i = 1:no_of_rules
@@ -207,15 +192,12 @@ function val = calc_Part_B(activation_weight, belief_degree, no_of_ref_val, no_o
     end
 end
 
-
-
 function val = calc_Part_C(activation_weight, no_of_rules)
     val = 1;
     for i = 1:no_of_rules
         val = val * (1 - activation_weight(i,1));
     end
 end
-
 
 function val = calculateY(agg_bel_val, ref_vals,no_ref_val)
     val = 0;
