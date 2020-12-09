@@ -3,18 +3,34 @@
 % Clear Workspace
 clear;
 
-% Initial Belief Degrees
-x0 = generate_belief_degree(3,3);  % N = 3, L = 3 (Disjunctive BRB. So, L = N)
+% Initial Inputs
+x0 = generate_belief_degree(3,3);  % Belief Degrees of size (N,L)
 disp("Initial Belief Degrees = ")
 disp(x0)
+
+% Bound Constraints
+lb = zeros(3,3); % Lower Bound
+ub = ones(3,3); % Upper Bound
+
+% Equality Constraints
+% Equality Constraints are taken as row vector "Aeq" sized m*n. 
+% m = number of equality constraints
+% n = number of elements in x0/solution
+% Solver converts x0/solution into x0(:)/solution(:) to impose constraints
+% beq is a column vector of m elements
+aeq = zeros(3,9);
+aeq(1,1:3) = [1 1 1];
+aeq(2,4:6) = [1 1 1];
+aeq(3,7:9) = [1 1 1];
+beq = ones(3,1);
 
 
 % Set nondefault solver options
 options = optimoptions('fmincon','PlotFcn','optimplotfvalconstr');
 
 % Solve
-[solution,objectiveValue] = fmincon(@objectiveFcn,x0,[],[],[],[],...
-    zeros(size(x0)),ones(size(x0)),[],options);
+[solution,objectiveValue] = fmincon(@objectiveFcn,x0,[],[],aeq,beq,lb,ub,[],...
+    options);
 
 % Clear variables
 clearvars options
@@ -64,12 +80,11 @@ belief_degrees = optimInput;
 
 ref_val = [1.0 0.5 0.0]; % Utility Scores of H = 1.0, M = 0.5, L = 0.0
 
-% Initialize calculation storing variables
-calculated_output = zeros(M,1); 
+calculated_output = zeros(M,1);
 differences = zeros(M,1);
 
 for i = 1:M
-    weights = get_rule_weights(train_input,i,T,N,ref_val); % Rule Weights
+    weights = get_rule_weights(train_input,i,T,N,ref_val); % Belief Degrees
 
     % Calculate Aggregated Belief Degree and Compute Y
     aggregated_belief_degree = calc_aggregated_belief_degree(weights, belief_degrees, N, L);
@@ -77,6 +92,7 @@ for i = 1:M
     calculated_output(i,1) = calculateY(aggregated_belief_degree,ref_val,N);
     differences(i,1) = calculated_output(i,1) - train_output(i,1);
 end
+
 
 % Define Objective Function
 f = sum((differences).^2) / M;
@@ -111,7 +127,6 @@ end
 
 function arr = transform_input (input,no_of_attr,no_of_ref_val,ref_vals)
     arr = zeros(no_of_attr,no_of_ref_val); % Initialize with row_number x column_number dummy values
-    
     % Calculate and Populate with original values
     for i = 1:no_of_attr
         if (input(1,i)>= ref_vals(1,2) && input(1,i) <= ref_vals(1,1))
