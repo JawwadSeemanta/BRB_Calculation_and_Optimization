@@ -35,41 +35,53 @@ train_output = [1.0;
     0.2;
     0.4];
 
+% Variable For Calculated Data
+calculated_output = zeros(M,1);
+difference = zeros(M,1);
+total_squared_difference = 0;
+
 % No of referencial values, N = 3
 N = 3;
-ref_values = [1.0 0.5 0.0] % Utility Scores of H = 1.0, M = 0.5, L = 0.0
+ref_values = [1.0 0.5 0.0]; % Utility Scores of H = 1.0, M = 0.5, L = 0.0
 
 % Initial Belief Degrees
 % Following Disjunctive BRB Approach, 
 % In Disjunctive BRB, number of rules, L = Number of referencial values, N
 L = N;
-initial_belief_degrees = generate_belief_degree(N,L)
+initial_belief_degrees = generate_belief_degree(N,L);
 
-% Input to Process
-input_number = 3; % This value determines the number of input_output pair we are considering
+% Run the Disjunctive BRB Process
+for prob_no = 1:M
+    % Input to Process
+    input_number = prob_no; % This value determines the number of input_output pair we are considering
+    
+    % Step 01: Input Transformation
+    transformed_input = transform_input(train_input(input_number,:),T, N, ref_values);
+    
+    % Step 02: Rule Activation Weight Calculation    
+    matching_degrees = calc_matching_degrees(transformed_input, T, N); % Calculate Matching Degree    
+    combined_matching_degree = calc_combined_matching_degrees(matching_degrees,L); % Calculate Combined Matching Degree    
+    activation_weight = (matching_degrees) ./ (combined_matching_degree); % Calculate Activation Weight
+    
+    % Step 03: Belief Degree Update
+    belief_update_factor = 1; % Use this value to update the belief degrees
+    final_belief_degree = (initial_belief_degrees) .* (belief_update_factor);
+    
+    % Step 04: Rule Aggregation
+    % Using "Analytical Method" of ER on Disjunctive BRB
+    aggregated_belief_degree = calc_aggregated_belief_degree(activation_weight, final_belief_degree, N, L);
+    
+    % Step 05: Calculate Y and Compare with training value
+    calculated_output(input_number,1) = calculateY(aggregated_belief_degree,ref_values,N);
+    difference(input_number,1) = calculated_output(input_number,1) - train_output(input_number,1);
+    total_squared_difference = total_squared_difference + (difference(input_number,1) * difference(input_number,1));
+end
 
-% Step 01: Input Transformation
-% train_input(input_number,:) takes values of the (input_number)th row
-transformed_input = transform_input(train_input(input_number,:),T, N, ref_values)
+% Finally, Calculate Total Mean Squared Error
+total_mean_squared_error = (total_squared_difference / M)
 
-% Step 02: Rule Activation Weight Calculation
-
-% Calculate Matching Degree
-matching_degrees = calc_matching_degrees(transformed_input, T, N)
-% Calculate Combined Matching Degree
-combined_matching_degree = calc_combined_matching_degrees(matching_degrees,L);
-% Calculate Activation Weight
-activation_weight = (matching_degrees) ./ (combined_matching_degree)
-
-% Step 03: Belief Degree Update
-
-belief_update_factor = 1; % Use this value to update the belief degrees
-final_belief_degree = (initial_belief_degrees) .* (belief_update_factor)
-
-% Step 04: Rule Aggregation
-
-% We are using "Analytical Method" of ER on Disjunctive BRB
-aggregated_belief_degree = calc_aggregated_belief_degree(activation_weight, final_belief_degree, N, L)
+% Clear Workspace or Next Run will freeze MATLAB
+clear;
 
 function arr = generate_belief_degree(N, L)
 % Function to generate belief degree
@@ -201,5 +213,13 @@ function val = calc_Part_C(activation_weight, no_of_rules)
     val = 1;
     for i = 1:no_of_rules
         val = val * (1 - activation_weight(i,1));
+    end
+end
+
+
+function val = calculateY(agg_bel_val, ref_vals,no_ref_val)
+    val = 0;
+    for i = 1: no_ref_val
+        val = val + (agg_bel_val(i,1)*ref_vals(1,i));
     end
 end
